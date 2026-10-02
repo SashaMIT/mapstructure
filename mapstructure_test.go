@@ -3,6 +3,7 @@ package mapstructure
 import (
 	"encoding/json"
 	"io"
+	"math"
 	"reflect"
 	"sort"
 	"strings"
@@ -2108,7 +2109,7 @@ func TestDecodeTable(t *testing.T) {
 			"struct with slice of struct property",
 			&SliceOfStruct{
 				Value: []Basic{
-					Basic{
+					{
 						Vstring: "vstring",
 						Vint:    2,
 						Vuint:   3,
@@ -2123,7 +2124,7 @@ func TestDecodeTable(t *testing.T) {
 			&map[string]interface{}{},
 			&map[string]interface{}{
 				"Value": []Basic{
-					Basic{
+					{
 						Vstring: "vstring",
 						Vint:    2,
 						Vuint:   3,
@@ -2317,6 +2318,53 @@ func TestInvalidType(t *testing.T) {
 
 	if derr.Errors[0] != "cannot parse 'Vuint', -42.000000 overflows uint" {
 		t.Errorf("got unexpected error: %s", err)
+	}
+}
+
+func TestUintOverflowsInt(t *testing.T) {
+	t.Parallel()
+
+	var result Basic
+	err := Decode(map[string]interface{}{
+		"vint64": uint64(math.MaxInt64) + 1,
+	}, &result)
+	if err == nil {
+		t.Fatalf("error should exist, got %d", result.Vint64)
+	}
+
+	derr, ok := err.(*Error)
+	if !ok {
+		t.Fatalf("error should be kind of Error, instead: %#v", err)
+	}
+	if derr.Errors[0] != "cannot parse 'Vint64', 9223372036854775808 overflows int" {
+		t.Errorf("got unexpected error: %s", err)
+	}
+	if result.Vint64 != 0 {
+		t.Errorf("got %d, want 0", result.Vint64)
+	}
+
+	err = Decode(map[string]interface{}{
+		"vint32": uint64(1 << 31),
+	}, &result)
+	if err == nil {
+		t.Fatalf("error should exist, got %d", result.Vint32)
+	}
+	derr, ok = err.(*Error)
+	if !ok {
+		t.Fatalf("error should be kind of Error, instead: %#v", err)
+	}
+	if derr.Errors[0] != "cannot parse 'Vint32', 2147483648 overflows int" {
+		t.Errorf("got unexpected error: %s", err)
+	}
+
+	err = Decode(map[string]interface{}{
+		"vint64": uint64(math.MaxInt64),
+	}, &result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Vint64 != math.MaxInt64 {
+		t.Fatalf("got %d, want MaxInt64", result.Vint64)
 	}
 }
 
